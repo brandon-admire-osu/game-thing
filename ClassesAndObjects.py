@@ -1,4 +1,8 @@
 from random import randint
+import networkx as nx
+import matplotlib.pyplot as plt
+from matplotlib.pyplot import figure
+import json
 
 global dire_fountain
 dire_fountain = []
@@ -15,30 +19,54 @@ class Map_Graph():
         self.nodes = dict()
         self.edges = list()
 
+    @property
+    def edge_iter(self) -> tuple:
+        for edge in self.edges:
+            yield (edge.A,edge.B)
+
     def resolve_combat(self):
         for node in self.nodes.values():
             node.resolve_combat()
 
-    def initialize_grid(self,node_num):
-        for x in range(node_num):
-            for y in range(node_num):
-                self.nodes[(x,y)] = Node(self,(x,y),randint(5,10))
+    # def initialize_grid(self,node_num):
+    #     for x in range(node_num):
+    #         for y in range(node_num):
+    #             self.nodes[(x,y)] = Node(self,(x,y),randint(5,10))
 
-        for x in range(node_num-1):
-            for y in range(node_num-1):
-                self.edges.append(Edge((x,y),(x+1,y+1)))
+    #     for x in range(node_num-1):
+    #         for y in range(node_num-1):
+    #             self.edges.append(Edge((x,y),(x+1,y+1)))
+
+    def initialize_board(self,target_map):
+        with open(target_map,"r") as target:
+            for edge in json.load(target):
+                # Add missing nodes to list
+                if edge[0] not in self.nodes:
+                    self.nodes[edge[0]] = Node(self,str(edge[0]),randint(5,10))
+                if edge[1] not in self.nodes:
+                    self.nodes[edge[1]] = Node(self,str(edge[1]),randint(5,10))
+                
+                # Build Edges
+                if len(edge) > 2:
+                    self.edges.append(Edge(edge[0],edge[1],edge[2]))
+                else:
+                    self.edges.append(Edge(edge[0],edge[1]))
 
     def display_board(self):
-        for x in range(5):
-            for y in range(5):
-                if self.nodes[(x,y)].owner > 0:
-                    print("\033[92m" + "{0:}".format(self.nodes[(x,y)]) + '\033[0m',end="")
-                elif self.nodes[(x,y)].owner < 0:
-                    print("\033[91m" + "{0:}".format(self.nodes[(x,y)]) + '\033[0m',end="")
-                else:
-                    print("{0:}".format(self.nodes[(x,y)]),end="")
+        for node in self.nodes:
+            if self.nodes[node].owner > 0:
+                print("\033[92m" + "{0:}".format(self.nodes[node]) + '\033[0m',end="")
+            elif self.nodes[node].owner < 0:
+                print("\033[91m" + "{0:}".format(self.nodes[node]) + '\033[0m',end="")
+            else:
+                print("{0:}".format(self.nodes[node]),end="")
             print()
 
+    def visualize_board(self):
+        # figure(figsize=(50,50))
+        G = nx.Graph(self.edge_iter)
+        nx.draw_networkx(G,pos=nx.planar_layout(G))
+        plt.show()
 
 class Unit():
     """Define the base Unit object.
@@ -229,3 +257,18 @@ class Edge():
         self.A = near
         self.B = far
         self.type = var
+
+    def __eq__(self, other) -> bool:
+        if self.A == other.A:
+            if self.B == other.B:
+                return True
+        if self.B == other.A:
+            if self.A == other.B:
+                return True
+        return False
+
+    def __repr__(self) -> str:
+        return f"{self.A} -{self.type}- {self.B}"
+
+    def __len__(self) -> int:
+        return 2
