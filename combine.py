@@ -2,9 +2,9 @@ import json
 
 out_list = list()
 
-sub_nodes = ["68","67","69","66","65"]
+sub_nodes = ["68","67","69","66","65","20","14","8"]
 
-with open("map_doublev2.json","r") as target:
+with open("maps/map_doublev2.json","r") as target:
     for edge in json.load(target):
         if any([x in edge[0] for x in sub_nodes]):
             out_list.append(edge)

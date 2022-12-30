@@ -1,0 +1,32 @@
+Road to prototype:
+
+-Develop movement/invasion rules and implement
+-Build order interface
+-Draw/make small test map
+-Build vanilla units for testing
+-Finalize wound system
+-Work on items/treasure
+-Implement special abilities/edge cases
+-Implent/build server service to run game
+-Build game state tracker
+-Build updates/changes interface
+-Implement range statistic for bombard
+-Implement edge types (mountains/water)
+-Finalize multi member unit destruction/healing
+-Work on neutral camps
+-Develop heuristics for region cap/# of edges
+-Design and implement VP
+-Develop unit cost/drafting system
+    Fast light
+    Standard close
+    standard far
+    standard fast
+
+Road to full production:
+
+-Full unit list
+-Balance/edit map
+-Build test suite for map and functionality
+-Make actual art?
+-Names/factions?
+-Class/species types and synergies

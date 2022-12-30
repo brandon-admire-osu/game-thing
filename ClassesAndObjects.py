@@ -3,11 +3,22 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import figure
 import json
+from UnitLibrary import *
 
 global dire_fountain
 dire_fountain = []
 global radiant_fountain
 radiant_fountain = []
+
+KEYWORDS_INIT = {
+            "Fragile":False,
+            "Durable":False,
+            "Tough":0,
+            "Bombard":0,
+            "Frail":0,
+            "Powerful":0,
+            "Highground":0
+        }
 
 class Map_Graph():
     """Defines structure for a map and its constructors
@@ -15,18 +26,112 @@ class Map_Graph():
     -Made of nodes
     """
 
-    def __init__(self) -> None:
+    def __init__(self,board_json,unit_info) -> None:
         self.nodes = dict()
         self.edges = list()
+        self.orders = list()
+        self.units = list()
+        self.bannars = dict()
+        self.dire = Node(None,None,None)
+        self.radiant = Node(None,None,None)
+
+        self.initialize_board(board_json)
+        self.build_unit_list(unit_info)
 
     @property
     def edge_iter(self) -> tuple:
         for edge in self.edges:
             yield (edge.A,edge.B)
 
-    def resolve_combat(self):
+    def advance_turn(self):
+        # Invade Step
+        for order in self.orders:
+            if order["type"].lower().strip() == "invade":
+                # Check for valid order
+                if order["target"] not in order["unit"].location.neighbors:
+                    order["unit"].defend()
+                else:
+                    order["unit"].invade(order["target"])
+
+        # Call special moves
+        for unit in [x.special_flags[0] for x in self.units]:
+            unit.special()
+        
+        # Convoy Step
+        for order in self.orders:
+            if order["type"].lower().strip() == "convoy":
+                order["unit"].convoy(order["target"])
+
+        # Call special moves
+        for unit in [x.special_flags[1] for x in self.units]:
+            unit.special()
+
+        # Support Step
+        for order in self.orders:
+            if order["type"].lower().strip() == "support":
+                # Check for valid order
+                if order["target"] not in order["unit"].location.neighbors:
+                    order["unit"].defend()
+                else:
+                    order["unit"].support(order["target"])
+
+        # Call special moves
+        for unit in [x.special_flags[2] for x in self.units]:
+            unit.special()
+
+        # Defend Step
+        for order in self.orders:
+            if order["type"].lower().strip() == "defend":
+                order["unit"].defend()
+
+        # Call special moves
+        for unit in [x.special_flags[3] for x in self.units]:
+            unit.special()
+
+        # Last Call
+
+        # Call special moves
+        for unit in [x.special_flags[4] for x in self.units]:
+            unit.special()
+
+        # Resolve Combat/Retreat
         for node in self.nodes.values():
             node.resolve_combat()
+
+        # Call special moves
+        for unit in [x.special_flags[5] for x in self.units]:
+            unit.special()
+
+        # Cleanup
+        # Call special moves
+        for unit in [x.special_flags[6] for x in self.units]:
+            unit.special()
+
+        # Destroy units
+        for node in self.nodes:
+            for unit in node.occupants:
+                if unit.wounds > 0 and not unit.keywords["Durable"]:
+                    unit.die()
+                elif unit.keywords["Durable"]:
+                    unit.wound = 0
+
+        # Revive units
+        for unit in radiant_fountain:
+            unit.revive()
+
+        for unit in dire_fountain:
+            unit.revive()
+
+        for order in self.orders:
+            if order["type"].lower().strip() == "plant":
+                order["unit"].plant_flag()
+
+        # Change ownership/flags of regions
+        for node in self.nodes:
+            if len(node.occupants) < 1:
+                node.owner = node.flag
+
+        # Advance Cycle
 
     # def initialize_grid(self,node_num):
     #     for x in range(node_num):
@@ -37,6 +142,27 @@ class Map_Graph():
     #         for y in range(node_num-1):
     #             self.edges.append(Edge((x,y),(x+1,y+1)))
 
+    def build_unit_list(self,unit_info,unit_lib) -> list:
+        for unit in unit_info:
+            if unit["bannar"] == "N/A":
+                pass
+            else:
+                if unit["bannar"] not in self.bannars:
+                    # Create bannar
+                    self.bannars[unit["bannar"]] = Bannar(unit_lib[unit["type"]]["num"])
+                
+                if unit["type"]["name"] == "Scouts":
+                    self.bannars[unit["bannar"]].add(Scouts(unit_info["team"],unit_info["owner_id"],unit_info["location"],unit_info["bannar"],unit_info["order"],unit_info["captain"],unit_info["wounds"]))
+                elif unit["type"]["name"] == "InfantrySquad":
+                    pass
+                elif unit["type"]["name"] == "ArcherSquad":
+                    pass
+                elif unit["type"]["name"] == "BarbarrianSquad":
+                    pass
+                elif unit["type"]["name"] == "Calvary":
+                    pass
+                elif unit["type"]["name"] == "Heavy Infantry":
+                    pass
     def initialize_board(self,target_map):
         with open(target_map,"r") as target:
             for edge in json.load(target):
@@ -68,95 +194,45 @@ class Map_Graph():
         nx.draw_networkx(G,pos=nx.planar_layout(G))
         plt.show()
 
-class Unit():
-    """Define the base Unit object.
-    -Units are any player controlled game piece
-    -Units can have between 1-4 members
-    -Members are a subtype, and just define mini-units that share a parent unit.
-    """
-
-    def __init__(self,tier,team,num=1):
-        self.tier = tier
-        self.members = []
-        self.team = team #-1 for dire, 1 for radient
-        self.wound = False
-        self.location = Node(None,None,None) #Dummy node for new units
-        self.origin = None # Used for movement/invade
-        if num > 1:
-            for i in range(num):
-                self.members.append(Member(tier))
-                return
-        else:
-            return
-
-    def __repr__(self) -> str:
-        if self.team > 0:
-            return "\033[92m" + str(self.tier) + '\033[0m'
-        elif self.team < 0:
-            return "\033[91m" + str(self.tier) + '\033[0m'
 
 
-    def invade(self,target):
-        # Add power to battle calculation
-        target.power_balance += self.tier * self.team
-        # Add self to guest list
-        target.guest_list.append(self)
-        # Put unit in combat limbo
-        self.origin = self.location
-        self.location = None
-        # Remove unit from origin occupants
-        try:
-            self.origin.cur_cap -= self.tier
-            self.origin.occupants.remove(self)
-        except:
-            pass
-        # Flag if invasion is hostile
-        if (target.owner != self.team):
-            target.hostile_invade = True
 
-    def defend(self):
-        self.location.power_balance += self.tier + 1 * self.team
+class Bannar():
+    """Tracking container for multi-member units"""
+    def __init__(self,num) -> None:
+        self.members = list()
+        self.max_members = num
+        self.captain = None
 
-    def support(self,target):
-        # Check if it is within 1
-        # (Special cases will be class modifications)
-        if (self.location in target.neighbors and not self.location.hostile):
-            target.power_balance += self.tier
-        elif (self.location.hostile):
-            self.location.power_balance += self.tier * self.team
-        else:
-            self.defend()
-    
-    def retreat(self,target):
+    def add(self,target):
+        if target.captain:
+            self.captain = target
+        self.members.append(target)
+
+    @property
+    def strength(self):
+        return len([x for x in self.members if x.alive])
+
+    def replenish(self):
+        if (self.captain.alive and 
+            self.captain.location.cap + self.captain.tier < self.captain.location.max_cap and
+            self.strength < self.max_members
+        ):
+            for member in self.members:
+                if not member.alive:
+                    member.revive(target=self.captain.location)
+                    break
+        elif (not self.captain.alive):
+            self.captain.revive()
+
+    def check_orders(self) -> bool:
         """
-        Move back from an illegal move
-        -defeted in combat
+        Check orders of all members are the same
         """
-        # Check if origin is a valid retreat path
-        if (self.origin.valid_move(self)):
-            target.arrive(self)
-            return
-        # Check adjacent nodes for valid retreat path
-        for neighbor in target.neighbors:
-            if (neighbor.valid_move(self)):
-                neighbor.arrive(self)
-                return
-        # Wound/destroy unit if no valid retreat path
-        self.location = None
-        self.origin = None
-        self.wound = True
-        if self.team > 0:
-            radiant_fountain.append(self)
-        else:
-            dire_fountain.append(self)
-        
-
-
-class Member(Unit):
-    """Individual member of a unit with more than one member
-    (A squad of henchmen, a group of calvary)
-    """
-    pass
+        # Inclued all members except captain iff captain's order is defend
+        _cur = [not y.captain or (y.captain and y.order[0] != "defend") for y in self.members]
+        # Return true iff all orders are the same
+        return all([x.order[0] == _cur[0].order[0] for x in _cur])
 
 
 
@@ -176,17 +252,27 @@ class Node():
         self.hostile_invade = False
         self.guest_list = [] #Units waiting to get in, depending on results of a battle
         self.occupants = []
+        self.flag = 0
 
     def __repr__(self) -> str:
         return f"[{self.name},{self.cur_cap}/{self.max_cap},{len(self.occupants)}]"
 
+    def __eq__(self,other) -> bool:
+        if type(other) == str:
+            return self.name == other
+        elif type(other) == type(self):
+            return self.name == other.name
+        else:
+            raise ValueError(f"Bad comparison of {self.name} and {other}")
+
     def valid_move(self,unit)->bool:
-        if self.owner == unit.team and self.cap + unit.tier <= self.max_cap:
+        if (self.owner == unit.team or self.owner == 0) and self.cap + unit.tier <= self.max_cap:
             return True
         else:
             return False
 
     def resolve_combat(self):
+        """Resolve combat for region and resolve retreats"""
         if len(self.guest_list) > 0:
             # Check highest tier for each side among invaders
             _high_radient = 0
@@ -216,6 +302,7 @@ class Node():
             
             # Empty the guest list now that all units have arrived or retreated
             self.guest_list.clear()
+
         
         # Reset the power balance to 0
         self.power_balance = 0
