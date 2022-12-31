@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import os.path
+import os
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -8,11 +9,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-# ID for interface spreadsheet
-# ####
-
-INTERFACE_ID = "####"
-SAMPLE_RANGE = 'Test!A1:E2'
+# Set sheet id as enviroment variable.
+INTERFACE_ID = os.environ.get('INTERFACE')
 
 # Only modify if scopes are modified on API dashboard
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
@@ -37,27 +35,72 @@ def get_secure_connection() -> Credentials:
     
     return creds
 
-def get_info():
+def get_ids(target_sheet) -> list:
+    """Get sheet ids of each player interface."""
+    creds = get_secure_connection()
+
+    try:
+        service = build('sheets', 'v4', credentials=creds)
+
+        meta = service.spreadsheets().get(spreadsheetId=target_sheet).execute()
+        sheets = meta.get('sheets','')
+
+        return [x.get("properties",{})["title"] for x in sheets if x.get("properties",{})["title"] not in ["Unit Library","Item Library"]]
+    except HttpError as error:
+        # TODO(developer) - Handle errors from drive API.
+        print(f'An Http error occurred: {error}')
+
+def get_unit_lib(target_sheet) -> list:
+    creds = get_secure_connection()
+
+    try:
+        service = build('sheets', 'v4', credentials=creds)
+        sheet = service.spreadsheets()
+        result = sheet.values().get(spreadsheetId=target_sheet,range=f"Unit Library!A:F").execute()
+
+        parsed = parse_results(result.get('values', []),"admin")
+
+        return dict(zip([x["Name"] for x in parsed],parsed))
+
+    except HttpError as error:
+        # TODO(developer) - Handle errors from drive API.
+        print(f'An Http error occurred: {error}')
+
+def get_info(ownerID_list,target_sheet) -> list:
+    """Retrieve and process rows from each player interface."""
     creds = get_secure_connection()
 
     try:
         # Build connection to the service
         # This is the main interface
         service = build('sheets', 'v4', credentials=creds)
-
         sheet = service.spreadsheets()
-        result = sheet.values().get(spreadsheetId=INTERFACE_ID,
-                                    range=SAMPLE_RANGE).execute()
-        values = result.get('values', [])
 
-        if not values:
-            print('No files found.')
-            return
-        for row in values:
-            print(row)
+        out_list = list()
+
+        for ownerID in ownerID_list:
+            result = sheet.values().get(spreadsheetId=target_sheet,range=f"{ownerID}!A:K").execute()
+
+            values = result.get('values', [])
+
+            out_list += parse_results(values,ownerID)
+
+        return out_list
+
     except HttpError as error:
         # TODO(developer) - Handle errors from drive API.
         print(f'An error occurred: {error}')
 
+
+def parse_results(results,owner):
+    out = list()
+    for row in results[1:]:
+        cur = dict(zip(results[0],row))
+        cur["Owner"] = owner
+        out.append(cur)
+    return out
+
+
 if __name__ == "__main__":
-    get_info()
+    # print(get_info(get_ids(INTERFACE_ID),INTERFACE_ID))
+    print(get_unit_lib(INTERFACE_ID))

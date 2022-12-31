@@ -5,20 +5,6 @@ from matplotlib.pyplot import figure
 import json
 from UnitLibrary import *
 
-global dire_fountain
-dire_fountain = []
-global radiant_fountain
-radiant_fountain = []
-
-KEYWORDS_INIT = {
-            "Fragile":False,
-            "Durable":False,
-            "Tough":0,
-            "Bombard":0,
-            "Frail":0,
-            "Powerful":0,
-            "Highground":0
-        }
 
 class Map_Graph():
     """Defines structure for a map and its constructors
@@ -26,17 +12,16 @@ class Map_Graph():
     -Made of nodes
     """
 
-    def __init__(self,board_json,unit_info) -> None:
+    def __init__(self) -> None:
         self.nodes = dict()
         self.edges = list()
         self.orders = list()
         self.units = list()
         self.bannars = dict()
+        self.radiant_fountain = Node(self,"r_fountain",100)
+        self.dire_fountain = Node(self,"d_fountain",100)
         self.dire = Node(None,None,None)
         self.radiant = Node(None,None,None)
-
-        self.initialize_board(board_json)
-        self.build_unit_list(unit_info)
 
     @property
     def edge_iter(self) -> tuple:
@@ -116,11 +101,17 @@ class Map_Graph():
                     unit.wound = 0
 
         # Revive units
-        for unit in radiant_fountain:
-            unit.revive()
+        for unit in self.radiant_fountain.occupants:
+            if unit.bannar:
+                unit.bannar.replenish(self.radiant)
+            else:
+                unit.revive(self.radiant)
 
-        for unit in dire_fountain:
-            unit.revive()
+        for unit in self.dire_fountain.occupants:
+            if unit.bannar:
+                unit.bannar.replenish(self.dire)
+            else:
+                unit.revive(self.dire)
 
         for order in self.orders:
             if order["type"].lower().strip() == "plant":
@@ -133,36 +124,168 @@ class Map_Graph():
 
         # Advance Cycle
 
-    # def initialize_grid(self,node_num):
-    #     for x in range(node_num):
-    #         for y in range(node_num):
-    #             self.nodes[(x,y)] = Node(self,(x,y),randint(5,10))
-
-    #     for x in range(node_num-1):
-    #         for y in range(node_num-1):
-    #             self.edges.append(Edge((x,y),(x+1,y+1)))
-
-    def build_unit_list(self,unit_info,unit_lib) -> list:
+    def build_unit_list(self,unit_info,unit_lib):
+        """Initialize units to self.units from list of dicts"""
         for unit in unit_info:
-            if unit["bannar"] == "N/A":
-                pass
+            if unit["Bannar"] == "N/A":
+                if unit["Unit Type"] == "Artillary":
+                    self.units.append(Artillary(
+                            unit["Member Name"],
+                            unit["Team"],
+                            unit["Owner"],
+                            self.nodes[unit["Location"]],
+                            unit["Bannar"],
+                            (unit["Order"],unit["Target"]),
+                            [self.radiant_fountain,self.dire_fountain],
+                            unit["Captain"],
+                            unit["Wounds"]
+                        ))
+                elif unit["Unit Type"] == "Battlefield Medic":
+                    self.units.append(BattlefieldMedic(
+                            unit["Member Name"],
+                            unit["Team"],
+                            unit["Owner"],
+                            self.nodes[unit["Location"]],
+                            unit["Bannar"],
+                            (unit["Order"],unit["Target"]),
+                            [self.radiant_fountain,self.dire_fountain],
+                            unit["Captain"],
+                            unit["Wounds"]
+                        ))
+                elif unit["Unit Type"] == "Assassin":
+                    self.units.append(Assassin(
+                            unit["Member Name"],
+                            unit["Team"],
+                            unit["Owner"],
+                            self.nodes[unit["Location"]],
+                            unit["Bannar"],
+                            (unit["Order"],unit["Target"]),
+                            [self.radiant_fountain,self.dire_fountain],
+                            unit["Captain"],
+                            unit["Wounds"]
+                        ))
+                elif unit["Unit Type"] == "Warrior":
+                    self.units.append(Warrior(
+                            unit["Member Name"],
+                            unit["Team"],
+                            unit["Owner"],
+                            self.nodes[unit["Location"]],
+                            unit["Bannar"],
+                            (unit["Order"],unit["Target"]),
+                            [self.radiant_fountain,self.dire_fountain],
+                            unit["Captain"],
+                            unit["Wounds"]
+                        ))
+                elif unit["Unit Type"]["name"] == "Mage":
+                    self.units.append(Mage(
+                            unit["Member Name"],
+                            unit["Team"],
+                            unit["Owner"],
+                            self.nodes[unit["Location"]],
+                            unit["Bannar"],
+                            (unit["Order"],unit["Target"]),
+                            [self.radiant_fountain,self.dire_fountain],
+                            unit["Captain"],
+                            unit["Wounds"]
+                        ))
+                elif unit["Unit Type"] == "Necromancer":
+                    self.units.append(Necromancer(
+                            unit["Member Name"],
+                            unit["Team"],
+                            unit["Owner"],
+                            self.nodes[unit["Location"]],
+                            unit["Bannar"],
+                            (unit["Order"],unit["Target"]),
+                            [self.radiant_fountain,self.dire_fountain],
+                            unit["Captain"],
+                            unit["Wounds"]
+                        ))
             else:
-                if unit["bannar"] not in self.bannars:
+                if unit["Bannar"] not in self.bannars:
                     # Create bannar
-                    self.bannars[unit["bannar"]] = Bannar(unit_lib[unit["type"]]["num"])
-                
-                if unit["type"]["name"] == "Scouts":
-                    self.bannars[unit["bannar"]].add(Scouts(unit_info["team"],unit_info["owner_id"],unit_info["location"],unit_info["bannar"],unit_info["order"],unit_info["captain"],unit_info["wounds"]))
-                elif unit["type"]["name"] == "InfantrySquad":
-                    pass
-                elif unit["type"]["name"] == "ArcherSquad":
-                    pass
-                elif unit["type"]["name"] == "BarbarrianSquad":
-                    pass
-                elif unit["type"]["name"] == "Calvary":
-                    pass
-                elif unit["type"]["name"] == "Heavy Infantry":
-                    pass
+                    self.bannars[unit["Bannar"]] = Bannar(unit_lib[unit["Unit Type"]]["Members"])
+        
+                if unit["Unit Type"] == "Scouts":
+                    self.bannars[unit["Bannar"]].add(Scouts(
+                        unit["Member Name"],
+                        unit["Team"],
+                        unit["Owner"],
+                        self.nodes[unit["Location"]],
+                        self.bannars[unit["Bannar"]],
+                        (unit["Order"],unit["Target"]),
+                        [self.radiant_fountain,self.dire_fountain],
+                        unit["Captain"],
+                        unit["Wounds"]
+                    ))
+                elif unit["Unit Type"] == "Infantry Squad":
+                    self.bannars[unit["Bannar"]].add(InfantrySquad(
+                        unit["Member Name"],
+                        unit["Team"],
+                        unit["Owner"],
+                        self.nodes[unit["Location"]],
+                        self.bannars[unit["Bannar"]],
+                        (unit["Order"],unit["Target"]),
+                        [self.radiant_fountain,self.dire_fountain],
+                        unit["Captain"],
+                        unit["Wounds"]
+                    ))
+                elif unit["Unit Type"] == "Archer Squad":
+                    self.bannars[unit["Bannar"]].add(ArcherSquad(
+                        unit["Member Name"],
+                        unit["Team"],
+                        unit["Owner"],
+                        self.nodes[unit["Location"]],
+                        self.bannars[unit["Bannar"]],
+                        (unit["Order"],unit["Target"]),
+                        [self.radiant_fountain,self.dire_fountain],
+                        unit["Captain"],
+                        unit["Wounds"]
+                    ))
+                elif unit["Unit Type"] == "Barbarrian Squad":
+                    self.bannars[unit["Bannar"]].add(BarbarrianSquad(
+                        unit["Member Name"],
+                        unit["Team"],
+                        unit["Owner"],
+                        self.nodes[unit["Location"]],
+                        self.bannars[unit["Bannar"]],
+                        (unit["Order"],unit["Target"]),
+                        [self.radiant_fountain,self.dire_fountain],
+                        unit["Captain"],
+                        unit["Wounds"]
+                    ))
+                elif unit["Unit Type"] == "Calvary":
+                    self.bannars[unit["Bannar"]].add(Calvary(
+                        unit["Member Name"],
+                        unit["Team"],
+                        unit["Owner"],
+                        self.nodes[unit["Location"]],
+                        self.bannars[unit["Bannar"]],
+                        (unit["Order"],unit["Target"]),
+                        [self.radiant_fountain,self.dire_fountain],
+                        unit["Captain"],
+                        unit["Wounds"]
+                    ))
+                elif unit["Unit Type"] == "Heavy Infantry":
+                    self.bannars[unit["Bannar"]].add(HeavyInfantry(
+                        unit["Member Name"],
+                        unit["Team"],
+                        unit["Owner"],
+                        self.nodes[unit["Location"]],
+                        self.bannars[unit["Bannar"]],
+                        (unit["Order"],unit["Target"]),
+                        [self.radiant_fountain,self.dire_fountain],
+                        unit["Captain"],
+                        unit["Wounds"]
+                    ))
+
+
+        for bannar in self.bannars.values():
+            for member in bannar.members:
+                self.units.append(member)
+
+        for unit in self.units:
+            unit.location.arrive(unit)
+
     def initialize_board(self,target_map):
         with open(target_map,"r") as target:
             for edge in json.load(target):
@@ -213,8 +336,22 @@ class Bannar():
     def strength(self):
         return len([x for x in self.members if x.alive])
 
-    def replenish(self):
-        if (self.captain.alive and 
+    @property
+    def soundOFF(self):
+        print("[",end="")
+        for member in self.members:
+            if member.captain:
+                print("\033[92m" + '1' + '\033[0m' + ", ",end="")
+            else:
+                print("\033[91m" + '0' + '\033[0m' + ", ",end="")
+        print("]")
+
+    def replenish(self,target):
+        if (not self.captain.alive):
+            for member in self.members:
+                if not member.alive:
+                    member.revive(target)
+        elif (self.captain.alive and 
             self.captain.location.cap + self.captain.tier < self.captain.location.max_cap and
             self.strength < self.max_members
         ):
@@ -222,8 +359,6 @@ class Bannar():
                 if not member.alive:
                     member.revive(target=self.captain.location)
                     break
-        elif (not self.captain.alive):
-            self.captain.revive()
 
     def check_orders(self) -> bool:
         """
